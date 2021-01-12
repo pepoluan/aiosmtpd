@@ -18,7 +18,6 @@ if hasattr(socket, "AF_UNIX"):
 
 from asyncio import coroutines, events, protocols
 from asyncio.streams import StreamReader, StreamWriter
-from asyncio.coroutines import coroutine
 
 
 _DEFAULT_LIMIT = 2 ** 16
@@ -59,8 +58,9 @@ class LimitOverrunError(Exception):
         return type(self), (self.args[0], self.consumed)
 
 
-@coroutine
-def open_connection(host=None, port=None, *, loop=None, limit=_DEFAULT_LIMIT, **kwds):
+async def open_connection(
+    host=None, port=None, *, loop=None, limit=_DEFAULT_LIMIT, **kwds
+):
     """A wrapper for create_connection() returning a (reader, writer) pair.
 
     The reader returned is a StreamReader instance; the writer is a
@@ -82,15 +82,12 @@ def open_connection(host=None, port=None, *, loop=None, limit=_DEFAULT_LIMIT, **
         loop = events.get_event_loop()
     reader = StreamReader(limit=limit, loop=loop)
     protocol = StreamReaderProtocol(reader, loop=loop)
-    transport, _ = yield from loop.create_connection(
-        lambda: protocol, host, port, **kwds
-    )
+    transport, _ = await loop.create_connection(lambda: protocol, host, port, **kwds)
     writer = StreamWriter(transport, protocol, reader, loop)
     return reader, writer
 
 
-@coroutine
-def start_server(
+async def start_server(
     client_connected_cb,
     host=None,
     port=None,
@@ -128,27 +125,25 @@ def start_server(
         protocol = StreamReaderProtocol(reader, client_connected_cb, loop=loop)
         return protocol
 
-    return (yield from loop.create_server(factory, host, port, **kwds))
+    return await loop.create_server(factory, host, port, **kwds)
 
 
 if hasattr(socket, "AF_UNIX"):
     # UNIX Domain Sockets are supported on this platform
 
-    @coroutine
-    def open_unix_connection(path=None, *, loop=None, limit=_DEFAULT_LIMIT, **kwds):
+    async def open_unix_connection(
+        path=None, *, loop=None, limit=_DEFAULT_LIMIT, **kwds
+    ):
         """Similar to `open_connection` but works with UNIX Domain Sockets."""
         if loop is None:
             loop = events.get_event_loop()
         reader = StreamReader(limit=limit, loop=loop)
         protocol = StreamReaderProtocol(reader, loop=loop)
-        transport, _ = yield from loop.create_unix_connection(
-            lambda: protocol, path, **kwds
-        )
+        transport, _ = await loop.create_unix_connection(lambda: protocol, path, **kwds)
         writer = StreamWriter(transport, protocol, reader, loop)
         return reader, writer
 
-    @coroutine
-    def start_unix_server(
+    async def start_unix_server(
         client_connected_cb, path=None, *, loop=None, limit=_DEFAULT_LIMIT, **kwds
     ):
         """Similar to `start_server` but works with UNIX Domain Sockets."""
@@ -160,7 +155,7 @@ if hasattr(socket, "AF_UNIX"):
             protocol = StreamReaderProtocol(reader, client_connected_cb, loop=loop)
             return protocol
 
-        return (yield from loop.create_unix_server(factory, path, **kwds))
+        return await loop.create_unix_server(factory, path, **kwds)
 
 
 class FlowControlMixin(protocols.Protocol):
@@ -216,8 +211,7 @@ class FlowControlMixin(protocols.Protocol):
         else:
             waiter.set_exception(exc)
 
-    @coroutine
-    def _drain_helper(self):
+    async def _drain_helper(self):
         if self._connection_lost:
             raise ConnectionResetError("Connection lost")
         if not self._paused:
@@ -226,7 +220,7 @@ class FlowControlMixin(protocols.Protocol):
         assert waiter is None or waiter.cancelled()
         waiter = self._loop.create_future()
         self._drain_waiter = waiter
-        yield from waiter
+        await waiter
 
 
 class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
