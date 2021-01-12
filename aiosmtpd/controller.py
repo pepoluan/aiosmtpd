@@ -30,6 +30,7 @@ from warnings import warn
 from public import public
 
 from aiosmtpd.smtp import SMTP
+from _protocol import StreamReaderProtocol
 
 AsyncServer = asyncio.base_events.Server
 
@@ -79,7 +80,7 @@ def get_localhost() -> Literal["::1", "127.0.0.1"]:
         raise
 
 
-class _FakeServer(asyncio.StreamReaderProtocol):
+class _FakeServer(StreamReaderProtocol):
     """
     Returned by _factory_invoker() in lieu of an SMTP instance in case
     factory() failed to instantiate an SMTP instance.

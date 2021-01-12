@@ -29,6 +29,8 @@ from aiosmtpd.controller import (
     _FakeServer,
     get_localhost,
 )
+from _protocol import StreamReaderProtocol
+from aiosmtpd.controller import asyncio, Controller, _FakeServer
 from aiosmtpd.handlers import Sink
 from aiosmtpd.smtp import SMTP as Server
 from aiosmtpd.testing.helpers import catchup_delay

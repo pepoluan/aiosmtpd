@@ -39,6 +39,8 @@ from public import public
 from aiosmtpd import __version__
 from aiosmtpd.proxy_protocol import ProxyData, get_proxy
 
+from _protocol import StreamReaderProtocol
+
 if sys.version_info >= (3, 8):
     from typing import Protocol  # pragma: py-lt-38
 else:  # pragma: py-ge-38
@@ -297,7 +299,7 @@ def sanitized_log(func: Callable[..., None], msg: AnyStr, *args, **kwargs) -> No
 
 
 @public
-class SMTP(asyncio.StreamReaderProtocol):
+class SMTP(StreamReaderProtocol):
     """
     `Documentation can be found here
     <https://aiosmtpd.readthedocs.io/en/latest/smtp.html>`_
