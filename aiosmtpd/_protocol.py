@@ -10,7 +10,7 @@ __all__ = [
 
 import logging
 
-from asyncio import coroutines, events, protocols
+from asyncio import events, protocols
 from asyncio.streams import StreamReader, StreamWriter
 
 
@@ -126,23 +126,18 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
     call inappropriate methods of the protocol.)
     """
 
-    def __init__(self, stream_reader, client_connected_cb=None, loop=None):
+    def __init__(self, stream_reader, loop=None):
         super().__init__(loop=loop)
         self._stream_reader = stream_reader
         self._stream_writer = None
-        self._client_connected_cb = client_connected_cb
         self._over_ssl = False
 
     def connection_made(self, transport):
         self._stream_reader.set_transport(transport)
         self._over_ssl = transport.get_extra_info("sslcontext") is not None
-        if self._client_connected_cb is not None:
-            self._stream_writer = StreamWriter(
-                transport, self, self._stream_reader, self._loop
-            )
-            res = self._client_connected_cb(self._stream_reader, self._stream_writer)
-            if coroutines.iscoroutine(res):
-                self._loop.create_task(res)
+        self._stream_writer = StreamWriter(
+            transport, self, self._stream_reader, self._loop
+        )
 
     def connection_lost(self, exc):
         if self._stream_reader is not None:

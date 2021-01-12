@@ -375,8 +375,7 @@ class SMTP(StreamReaderProtocol):
         self._loop = loop if loop else make_loop()
         super().__init__(
             asyncio.StreamReader(loop=self.loop, limit=self.line_length_limit),
-            client_connected_cb=self._client_connected_cb,
-            loop=self.loop,
+            loop=self.loop
         )
         if data_size_limit is not None and not isinstance(data_size_limit, int):
             raise TypeError("data_size_limit must be None or int")
@@ -607,6 +606,8 @@ class SMTP(StreamReaderProtocol):
                     self, self.session, self.envelope)
         else:
             super().connection_made(transport)
+            self._reader = self._stream_reader
+            self._writer = self._stream_writer
             self.transport = transport
             log.info('Peer: %r', self.session.peer)
             # Process the client's requests.
@@ -651,14 +652,6 @@ class SMTP(StreamReaderProtocol):
         # which gracefully closes the SSL transport if required and cleans
         # up state.
         self.transport.close()
-
-    def _client_connected_cb(
-            self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ):
-        # This is redundant since we subclass StreamReaderProtocol, but I like
-        # the shorter names.
-        self._reader = reader
-        self._writer = writer
 
     def _set_post_data_state(self):
         """Reset state variables to their post-DATA state."""
