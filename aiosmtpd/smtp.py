@@ -40,6 +40,9 @@ class _Missing:
     def __repr__(self):
         return "MISSING"
 
+    def __bool__(self):
+        return False
+
 
 class _AuthMechAttr(NamedTuple):
     method: "AuthMechanismType"
@@ -741,7 +744,7 @@ class SMTP(asyncio.StreamReaderProtocol):
         self._set_rset_state()
         self.session.extended_smtp = False
         status = await self._call_handler_hook('HELO', hostname)
-        if status is MISSING:
+        if not status:
             self.session.host_name = hostname
             status = '250 {}'.format(self.hostname)
         await self.push(status)
@@ -752,7 +755,7 @@ class SMTP(asyncio.StreamReaderProtocol):
             await self.push('501 Syntax: EHLO hostname')
             return
 
-        response = []
+        response: List[str] = []
         self._set_rset_state()
         self.session.extended_smtp = True
         response.append('250-%s' % self.hostname)
@@ -783,15 +786,21 @@ class SMTP(asyncio.StreamReaderProtocol):
             # Old behavior: Send all responses first...
             for r in response:
                 await self.push(r)
-            # ... then send the response from the hook.
-            response = [await self._call_handler_hook("EHLO", hostname)]
+            # ... then send the final response from the hook.
+            hook_resp: str = await self._call_handler_hook("EHLO", hostname)
+            hook_resp = hook_resp.rstrip() if hook_resp else "250 HELP"
+            response = [hook_resp]
             # (The hook might internally send its own responses.)
         elif self._ehlo_hook_ver == "new":  # pragma: nobranch
             # New behavior: hand over list of responses so far to the hook, and
             # REPLACE existing list of responses with what the hook returns.
             # We will handle the push()ing
             response.append('250 HELP')
-            response = await self._call_handler_hook("EHLO", hostname, response)
+            old_resp = response.copy()  # Defensive save
+            hook_resplist: Iterable[str] = await self._call_handler_hook(
+                "EHLO", hostname, response
+            )
+            response = hook_resplist or old_resp
 
         for r in response:
             await self.push(r)
@@ -799,7 +808,7 @@ class SMTP(asyncio.StreamReaderProtocol):
     @syntax('NOOP [ignored]')
     async def smtp_NOOP(self, arg):
         status = await self._call_handler_hook('NOOP', arg)
-        await self.push('250 OK' if status is MISSING else status)
+        await self.push(status or "250 OK")
 
     @syntax('QUIT')
     async def smtp_QUIT(self, arg):
@@ -807,7 +816,7 @@ class SMTP(asyncio.StreamReaderProtocol):
             await self.push('501 Syntax: QUIT')
         else:
             status = await self._call_handler_hook('QUIT')
-            await self.push('221 Bye' if status is MISSING else status)
+            await self.push(status or "221 Bye")
             self._handler_coroutine.cancel()
             self.transport.close()
 
@@ -906,12 +915,11 @@ class SMTP(asyncio.StreamReaderProtocol):
                 # None means there's an error already handled by method and
                 # we don't need to do anything more
                 status = None
-            elif auth_result is MISSING or auth_result is False:
-                # MISSING means no error in AUTH process, but credentials
+            elif not auth_result:
+                # MISSING/False means no error in AUTH process, but credentials
                 # is rejected / not valid
                 status = CODE_INVALID
             else:
-
                 self.session.login_data = auth_result
                 status = CODE_SUCCESS
 
@@ -1147,9 +1155,10 @@ class SMTP(asyncio.StreamReaderProtocol):
             else:
                 status = await self._call_handler_hook('VRFY', address)
                 await self.push(
+                    status or
                     '252 Cannot VRFY user, but will accept message '
                     'and attempt delivery'
-                    if status is MISSING else status)
+                )
         else:
             await self.push('501 Syntax: VRFY <address>')
 
@@ -1214,11 +1223,11 @@ class SMTP(asyncio.StreamReaderProtocol):
                 '555 MAIL FROM parameters not recognized or not implemented')
             return
         status = await self._call_handler_hook('MAIL', address, mail_options)
-        if status is MISSING:
+        if not status:
             self.envelope.mail_from = address
             self.envelope.mail_options.extend(mail_options)
             status = '250 OK'
-        log.info('%r sender: %s', self.session.peer, address)
+        log.info('%r sender: %s', self.session.peer, self.envelope.mail_from)
         await self.push(status)
 
     @syntax('RCPT TO: <address>', extended=' [SP <mail-parameters>]')
@@ -1256,7 +1265,7 @@ class SMTP(asyncio.StreamReaderProtocol):
             )
 
         status = await self._call_handler_hook('RCPT', address, rcpt_options)
-        if status is MISSING:
+        if not status:
             self.envelope.rcpt_tos.append(address)
             self.envelope.rcpt_options.extend(rcpt_options)
             status = '250 OK'
@@ -1274,7 +1283,7 @@ class SMTP(asyncio.StreamReaderProtocol):
                  DeprecationWarning)
             await self.rset_hook()
         status = await self._call_handler_hook('RSET')
-        await self.push('250 OK' if status is MISSING else status)
+        await self.push(status or "250 OK")
 
     @syntax('DATA')
     async def smtp_DATA(self, arg: str) -> None:
@@ -1405,7 +1414,7 @@ class SMTP(asyncio.StreamReaderProtocol):
                 if status is None:                  # pragma: nocover
                     status = MISSING
         self._set_post_data_state()
-        await self.push('250 OK' if status is MISSING else status)
+        await self.push(status or "250 OK")
 
     # Commands that have not been implemented.
     async def smtp_EXPN(self, arg):
