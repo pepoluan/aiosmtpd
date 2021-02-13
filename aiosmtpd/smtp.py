@@ -85,6 +85,9 @@ VALID_AUTHMECH = re.compile(r"[A-Z0-9_-]+\Z")
 # https://tools.ietf.org/html/rfc3207.html#page-3
 ALLOWED_BEFORE_STARTTLS = {"NOOP", "EHLO", "STARTTLS", "QUIT"}
 
+HOOK_MUST_ASYNC = {"PROXY", "exception"}
+HOOK_MUSTNOT_ASYNC = {"STARTTLS"}
+
 # Auth hiding regexes
 CLIENT_AUTH_B = re.compile(
     # Matches "AUTH" <mechanism> <whitespace_but_not_\r_nor_\n>
@@ -349,6 +352,13 @@ class SMTP(asyncio.StreamReaderProtocol):
         self._auth_required = auth_required
 
         # Get hooks & methods to significantly speedup getattr's
+
+        self._smtp_methods: Dict[str, Any] = {
+            m.replace("smtp_", ""): getattr(self, m)
+            for m in dir(self)
+            if m.startswith("smtp_")
+        }
+
         self._auth_methods: Dict[str, _AuthMechAttr] = {
             getattr(
                 mfunc, "__auth_mechanism_name__",
@@ -367,11 +377,23 @@ class SMTP(asyncio.StreamReaderProtocol):
                 for m, impl in sorted(self._auth_methods.items())
             )
         )
-        self._handle_hooks: Dict[str, Callable] = {
-            m.replace("handle_", ""): getattr(handler, m)
-            for m in dir(handler)
-            if m.startswith("handle_")
-        }
+
+        _must_async = HOOK_MUST_ASYNC | self._smtp_methods.keys()
+        _mustnot_async = HOOK_MUSTNOT_ASYNC
+        self._handle_hooks: Dict[str, Callable] = {}
+        for m in dir(handler):
+            if not m.startswith("handle_"):
+                continue
+            event = m.replace("handle_", "")
+            hook = getattr(handler, m)
+            if event in _mustnot_async:
+                assert not inspect.iscoroutinefunction(hook), (
+                    m + " must NOT be async!"
+                )
+            else:
+                if event in _must_async:
+                    assert inspect.iscoroutinefunction(hook), m + " must be async!"
+            self._handle_hooks[event] = hook
 
         # When we've deprecated the 4-arg form of handle_EHLO,
         # we can -- and should -- remove this whole code block
@@ -391,12 +413,6 @@ class SMTP(asyncio.StreamReaderProtocol):
                 self._ehlo_hook_ver = "new"
             else:
                 raise RuntimeError("Unsupported EHLO Hook")
-
-        self._smtp_methods: Dict[str, Any] = {
-            m.replace("smtp_", ""): getattr(self, m)
-            for m in dir(self)
-            if m.startswith("smtp_")
-        }
 
         self._call_limit_default: int
         if command_call_limit is None:

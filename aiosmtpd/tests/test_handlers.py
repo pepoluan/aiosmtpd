@@ -787,6 +787,54 @@ class TestProxyMocked:
 
 
 class TestHooks:
+    # Need 5 args because EHLO is restricted to 5 args during __init__
+    async def func_async(self, a1, a2, a3, a4, a5):
+        pass
+
+    def func_normal(self, a1, a2, a3, a4, a5):
+        pass
+
+    @pytest.mark.parametrize(
+        "event,need_async",
+        [
+            ("HELO", True),
+            ("EHLO", True),
+            ("NOOP", True),
+            ("QUIT", True),
+            ("VRFY", True),
+            ("MAIL", True),
+            ("RCPT", True),
+            ("RSET", True),
+            ("DATA", True),
+            ("exception", True),
+            ("STARTTLS", False),
+        ]
+    )
+    def test_sync_async(self, event, need_async):
+
+        class Klass:
+            pass
+
+        hname = f"handle_{event}"
+        setf = partial(setattr, Klass, hname)
+
+        if need_async:
+            setf(self.func_async)
+        else:
+            setf(self.func_normal)
+        s = Server(Klass())
+        del s
+
+        if need_async:
+            setf(self.func_normal)
+            expectre = f"{hname} must be async!"
+        else:
+            setf(self.func_async)
+            expectre = f"{hname} must NOT be async!"
+        with pytest.raises(AssertionError, match=expectre):
+            s = Server(Klass())
+            del s
+
     @handler_data(class_=HELOHandler)
     def test_hook_HELO(self, plain_controller, client):
         assert isinstance(plain_controller.handler, HELOHandler)
