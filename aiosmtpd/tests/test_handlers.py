@@ -3,6 +3,7 @@
 
 import logging
 import sys
+from functools import partial
 from io import StringIO
 from mailbox import Maildir
 from operator import itemgetter
@@ -16,6 +17,7 @@ import pytest
 
 from aiosmtpd.controller import Controller
 from aiosmtpd.handlers import AsyncMessage, Debugging, Mailbox, Proxy, Sink
+from aiosmtpd.smtp import MISSING
 from aiosmtpd.smtp import SMTP as Server
 from aiosmtpd.smtp import Session as ServerSession
 from aiosmtpd.testing.statuscodes import SMTP_STATUS_CODES as S
@@ -1022,3 +1024,243 @@ class TestDeprecation:
         expectedre = r"Use handler.handle_RSET\(\) instead of .rset_hook\(\)"
         with pytest.warns(DeprecationWarning, match=expectedre):
             client.rset()
+
+
+class HasRetval:
+    retval = MISSING
+
+
+class RetNoneMissing(HasRetval):
+    lastfrom = ""
+    lastrcpt = ""
+
+    async def handle_NOOP(self, server, session, envelope, arg):
+        return self.retval
+
+    async def handle_QUIT(self, server, session, envelope):
+        return self.retval
+
+    async def handle_VRFY(self, server, session, envelope, address):
+        return self.retval
+
+    async def handle_MAIL(self, server, session, envelope, address, mail_options):
+        self.lastfrom = address
+        return self.retval
+
+    async def handle_RCPT(self, server, session, envelope, address, rcpt_options):
+        self.lastrcpt = address
+        return self.retval
+
+    async def handle_RSET(self, server, session, envelope):
+        return self.retval
+
+    async def handle_DATA(self, server, session, envelope):
+        return self.retval
+
+    def handle_STARTTLS(self, server, session, envelope):
+        return self.retval
+
+
+class EHLO4(HasRetval):
+    async def handle_EHLO(self, server, session, envelope, hostname):
+        return self.retval
+
+
+class EHLO5(HasRetval):
+    async def handle_EHLO(self, server, session, envelope, hostname, responses):
+        return self.retval
+
+
+@pytest.fixture
+def client_reset_retval(plain_controller, client):
+    handler: HasRetval = plain_controller.handler
+    #
+    yield client
+    #
+    handler.retval = MISSING
+
+
+@handler_data(class_=RetNoneMissing)
+class TestHandleRetval:
+    def test_NOOP(self, plain_controller, client_reset_retval):
+        handler: RetNoneMissing = plain_controller.handler
+        client = client_reset_retval
+
+        handler.retval = MISSING
+        resp1 = client.noop()
+
+        handler.retval = None
+        resp2 = client.noop()
+        assert resp1 == resp2
+
+        handler.retval = "250 whatevs"
+        resp3 = client.noop()
+        assert resp3 != resp1
+        assert resp3 == (250, b"whatevs")
+
+    def test_QUIT(self, plain_controller, client_reset_retval):
+        handler: RetNoneMissing = plain_controller.handler
+        client = client_reset_retval
+
+        handler.retval = MISSING
+        resp1 = client.quit()
+
+        client.connect(*Global.SrvAddr)
+        handler.retval = None
+        resp2 = client.quit()
+        assert resp1 == resp2
+
+        client.connect(*Global.SrvAddr)
+        handler.retval = "221 whatevs"
+        resp3 = client.quit()
+        assert resp3 == (221, b"whatevs")
+
+    def test_VRFY(self, plain_controller, client_reset_retval):
+        handler: RetNoneMissing = plain_controller.handler
+        client = client_reset_retval
+
+        handler.retval = MISSING
+        resp1 = client.vrfy("amelia@example")
+
+        handler.retval = None
+        resp2 = client.vrfy("amelia@example")
+        assert resp1 == resp2
+
+        handler.retval = "252 whatevs"
+        resp3 = client.vrfy("amelia@example")
+        assert resp3 != resp1
+        assert resp3 == (252, b"whatevs")
+
+    def test_MAIL(self, plain_controller, client_reset_retval):
+        handler: RetNoneMissing = plain_controller.handler
+        client = client_reset_retval
+
+        handler.retval = MISSING
+        client.helo("example.org")
+        resp1 = client.mail("bruce@example.org")
+        assert handler.lastfrom == "bruce@example.org"
+
+        handler.retval = MISSING
+        client.rset()
+        handler.retval = None
+        resp2 = client.mail("brian@example.org")
+        assert handler.lastfrom == "brian@example.org"
+        assert resp1 == resp2
+
+        handler.retval = MISSING
+        client.rset()
+        handler.retval = "250 whatevs"
+        resp3 = client.mail("bobby@example.org")
+        assert handler.lastfrom == "bobby@example.org"
+        assert resp3 == (250, b"whatevs")
+
+    def test_RCPT(self, plain_controller, client_reset_retval):
+        handler: RetNoneMissing = plain_controller.handler
+        client = client_reset_retval
+        client.helo("example.org")
+
+        handler.retval = MISSING
+        client.mail("charley@example.org")
+        assert handler.lastfrom == "charley@example.org"
+        resp1 = client.rcpt("clarissa@example.org")
+        assert handler.lastrcpt == "clarissa@example.org"
+
+        client.rset()
+        client.mail("chuck@example.org")
+        assert handler.lastfrom == "chuck@example.org"
+        handler.retval = None
+        resp2 = client.rcpt("charlotte@example.org")
+        assert handler.lastrcpt == "charlotte@example.org"
+        assert resp1 == resp2
+
+        handler.retval = MISSING
+        client.rset()
+        client.mail("conner@example.org")
+        assert handler.lastfrom == "conner@example.org"
+        handler.retval = "250 whatevs"
+        resp3 = client.rcpt("cindy@example.org")
+        assert handler.lastrcpt == "cindy@example.org"
+        assert resp3 == (250, b"whatevs")
+
+    def test_RSET(self, plain_controller, client_reset_retval):
+        handler: RetNoneMissing = plain_controller.handler
+        client = client_reset_retval
+        client.helo("example.org")
+
+        handler.retval = MISSING
+        resp1 = client.rset()
+
+        handler.retval = None
+        resp2 = client.rset()
+        assert resp1 == resp2
+
+        handler.retval = "250 whatevs"
+        resp3 = client.rset()
+        assert resp3 == (250, b"whatevs")
+
+    def test_DATA(self, plain_controller, client_reset_retval):
+        handler: RetNoneMissing = plain_controller.handler
+        client = client_reset_retval
+        msg = dedent(
+            """\
+            From: danny@example.org
+            To: diane@example.org
+            Subject: Dinner?
+
+            Sooo... you interested in a dinner Friday night?
+
+            D.
+            """
+        )
+
+        def preamble(retval):
+            handler.retval = MISSING
+            client.ehlo("example.org")
+            client.mail("danny@example.org")
+            client.rcpt("diane@example.org")
+            handler.retval = retval
+
+        preamble(MISSING)
+        resp1 = client.data(msg)
+
+        preamble(None)
+        resp2 = client.data(msg)
+        assert resp1 == resp2
+
+        preamble("250 whatevs")
+        resp3 = client.data(msg)
+        assert resp3 == (250, b"whatevs")
+
+    @handler_data(class_=EHLO4)
+    def test_EHLO4(self, plain_controller, client_reset_retval):
+        handler = plain_controller.handler
+        assert isinstance(handler, EHLO4)
+        client = client_reset_retval
+
+        handler.retval = MISSING
+        resp1 = client.ehlo("example.org")
+
+        handler.retval = None
+        resp2 = client.ehlo("example.org")
+        assert resp2 == resp1
+
+        handler.retval = "250-SUMTHING\r\n250 HELP"
+        code3, mesg3 = client.ehlo("example.org")
+        assert mesg3.splitlines()[-2:] == [b"SUMTHING", b"HELP"]
+
+    @handler_data(class_=EHLO5)
+    def test_EHLO5(self, plain_controller, client_reset_retval):
+        handler = plain_controller.handler
+        assert isinstance(handler, EHLO5)
+        client = client_reset_retval
+
+        handler.retval = MISSING
+        resp1 = client.ehlo("example.org")
+
+        handler.retval = None
+        resp2 = client.ehlo("example.org")
+        assert resp2 == resp1
+
+        handler.retval = ["250-test.example.org", "250-WHATEVS", "250 HELP"]
+        code3, mesg3 = client.ehlo("example.org")
+        assert mesg3.splitlines()[-2:] == [b"WHATEVS", b"HELP"]
