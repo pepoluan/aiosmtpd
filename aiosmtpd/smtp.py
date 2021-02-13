@@ -789,19 +789,29 @@ class SMTP(asyncio.StreamReaderProtocol):
                 await self.push(r)
             # ... then send the final response from the hook.
             hook_resp: str = await self._call_handler_hook("EHLO", hostname)
-            hook_resp = hook_resp.rstrip() if hook_resp else "250 HELP"
-            response = [hook_resp]
-            # (The hook might internally send its own responses.)
+            # (The hook might internally send its own responses,
+            # or piggybacking in hook_resp by joining with "\r\n")
+            if not hook_resp:
+                # Hook returned Falsey or there's no hook
+                self.session.host_name = hostname
+                response = ["250 HELP"]
+            else:
+                response = [hook_resp]
         elif self._ehlo_hook_ver == "new":  # pragma: nobranch
             # New behavior: hand over list of responses so far to the hook, and
             # REPLACE existing list of responses with what the hook returns.
             # We will handle the push()ing
             response.append('250 HELP')
-            old_resp = response.copy()  # Defensive save
-            hook_resplist: Iterable[str] = await self._call_handler_hook(
+            old_resp = response.copy()  # Save just in case hook modifies response
+            hook_resplist: List[str] = await self._call_handler_hook(
                 "EHLO", hostname, response
             )
-            response = hook_resplist or old_resp
+            if not hook_resplist:
+                # Hook returned Falsey or there's no hook
+                self.session.host_name = hostname
+                response = old_resp  # Use saved version
+            else:
+                response = hook_resplist
 
         for r in response:
             await self.push(r)
