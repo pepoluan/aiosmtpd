@@ -218,7 +218,7 @@ def temp_maildir(tmp_path: Path) -> Generator[Path, None, None]:
 
 @pytest.fixture
 def mailbox_controller(
-        temp_maildir, get_controller
+    temp_maildir, get_controller
 ) -> Generator[Controller, None, None]:
     handler = Mailbox(temp_maildir)
     controller = get_controller(handler)
@@ -810,10 +810,9 @@ class TestHooks:
             ("DATA", True),
             ("exception", True),
             ("STARTTLS", False),
-        ]
+        ],
     )
     def test_sync_async(self, event, need_async):
-
         class Klass:
             pass
 
@@ -854,13 +853,13 @@ class TestHooks:
 
     def test_hook_EHLO_deprecated_warning(self):
         with pytest.warns(
-                DeprecationWarning,
-                match=(
-                    # Is a regex; escape regex special chars if necessary
-                    r"Use the 5-argument handle_EHLO\(\) hook instead of the "
-                    r"4-argument handle_EHLO\(\) hook; support for the 4-argument "
-                    r"handle_EHLO\(\) hook will be removed in version 2.0"
-                )
+            DeprecationWarning,
+            match=(
+                # Is a regex; escape regex special chars if necessary
+                r"Use the 5-argument handle_EHLO\(\) hook instead of the "
+                r"4-argument handle_EHLO\(\) hook; support for the 4-argument "
+                r"handle_EHLO\(\) hook will be removed in version 2.0"
+            ),
         ):
             _ = Server(EHLOHandlerDeprecated())
 
