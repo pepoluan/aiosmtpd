@@ -33,11 +33,12 @@ line, but its constructor cannot accept arguments.
 Handler Hooks
 =============
 
-Handlers can implement hooks that get called during the SMTP dialog, or in
-exceptional cases.  These *handler hooks* are ALL called **asynchronously**
+Handlers can implement hooks that get called during the SMTP dialog,
+or in certain situations.
+Nearly all these *handler hooks* are called :boldital:`asynchronously`
 (i.e. they are coroutines).
 
-All handler hooks are optional and default behaviors are
+All handler hooks are **optional** and default behaviors are
 carried out by the :class:`SMTP` class when a hook is omitted,
 so you only need to implement the ones you care about.
 
@@ -65,25 +66,39 @@ All handler hooks will be called with at least three arguments:
 
    The :ref:`envelope instance <sessions_and_envelopes>` of the current SMTP Transaction
 
-Some handler hooks will receive additional arguments.
+Some handler hooks will receive additional arguments,
+please see the next sections for details.
 
 
-Supported Hooks
----------------
+Command Hooks
+-------------
+
+These hooks are called when processing an SMTP command.
+
+.. admonition:: On Return Values
+
+   Unless specified, if a Command Hook returns ``None`` (or anything *Falsey*),
+   it usually will be treated as if the Command Hook does not exist.
+   In other words, :class:`~aiosmtpd.smtp.SMTP` will assume default behavior.
+
+   Some hooks are treated differently, though.
+   Please refer to the description for each hook below.
 
 The following hooks are currently supported (in alphabetical order):
 
 .. py:method:: handle_AUTH(server, session, envelope, args)
+   :async:
    :noindex:
 
    Called to handle ``AUTH`` command if you need custom AUTH behavior.
 
    For more information, please read the documentation for :ref:`auth`.
 
-.. py:method:: handle_DATA(server, session, envelope) -> str
+.. py:method:: handle_DATA(server, session, envelope)
    :async:
 
    :return: Response message to be sent to the client
+   :rtype: str or None
 
    Called during ``DATA`` after the entire message (`"SMTP content"
    <https://tools.ietf.org/html/rfc5321#section-2.3.9>`_ as described in
@@ -98,20 +113,36 @@ The following hooks are currently supported (in alphabetical order):
    ``decode_data=False`` or ``decode_data=True``.
    See :attr:`Envelope.content` for more info.
 
-.. py:method:: handle_EHLO(server, session, envelope, hostname, responses) -> List[str]
+   Any mutations done by ``handle_DATA`` to the :attr:`envelope` object **will be discarded**.
+
+   The return value will be sent as-is to the client, unless it is Falsey.
+
+.. py:method:: handle_EHLO(server, session, envelope, hostname)
    :async:
    :noindex:
 
    :param hostname: The host name given by the client in the ``EHLO`` command
    :type hostname: str
    :return: Response message to be sent to the client
+   :rtype: str or None
 
    This hook is called during ``EHLO``.
 
-   This hook may push *additional* ``250-<command>`` responses to the client by doing
-   ``await server.push(status)`` before returning ``"250 HELP"`` as the final response.
+   This hook MAY push *additional* ``250-<feature>`` responses to the client
+   using either of these methods:
 
-    .. important::
+     * By invoking ``await server.push()``, or
+     * By returning a ``"\r\n"``-joined list. Example::
+
+         additionals = ["250-FEAT1", "250-FEAT2 OPT21", "250 HELP"]
+         return "\r\n".join(additionals)
+
+   Note that each additional feature return MUST be prefixed with ``"250-"``
+   except for the very last one.
+
+   This hook SHOULD return ``"250 HELP"`` as the final response.
+
+   .. important::
 
         If the handler sets the ``session.host_name`` attribute to a false-y value
         (or leave it as the default ``None`` value)
@@ -125,49 +156,68 @@ The following hooks are currently supported (in alphabetical order):
       Use the :meth:`5-argument form <handle_EHLO>` instead.
       Support for the 4-argument form **will be removed in version 2.0**
 
-.. py:method:: handle_EHLO(server, session, envelope, hostname, responses) -> List[str]
+.. py:method:: handle_EHLO(server, session, envelope, hostname, responses)
    :async:
 
    :param hostname: The host name given by the client in the ``EHLO`` command
    :type hostname: str
    :param responses: The 'planned' responses to the ``EHLO`` command
       *including* the last ``250 HELP`` response.
-   :type responses: List[str]
+   :type responses: list[str]
    :return: List of response messages to be sent to the client
+   :rtype: Iterable[str] or None
 
    Called during ``EHLO``.
 
-   The hook MUST return a list containing the desired responses.
-   The returned list should end with ``250 HELP``
+   The hook MUST return an :term:`iterable` containing the desired responses.
+   This iterable :boldital:`will replace` the current list of responses.
+   Each member of the iterable MUST be prefixed with ``"250-"``
+   except the very last one.
 
-   This hook MUST also set the :attr:``session.host_name`` attribute.
+   The returned iterable SHOULD end with ``250 HELP``.
+
+   Examples::
+
+        # Example 1: Dropping all features, replacing with FEAT1 and FEAT2
+        return [responses[0], "250-FEAT1", "250-FEAT2 OPT21", "250 HELP"]
+
+        # Example 2: Adding new features FEAT1 and FEAT2. Last element of
+        # responses is "250 HELP" that we manually add to the end of the list.
+        return responses[:-1] + ["250-FEAT1", "250-FEAT2 OPT21", "250 HELP"]
+
+
+   This hook MUST also set the :attr:`session.host_name` attribute.
 
    .. important::
 
       It is strongly recommended to not change element ``[0]`` of the list
       (containing the hostname of the SMTP server).
 
-.. py:method:: handle_HELO(server, session, envelope, hostname) -> str
+   .. versionadded:: 1.3
+
+.. py:method:: handle_HELO(server, session, envelope, hostname)
    :async:
 
    :param hostname: The host name given by client during ``HELO``
    :type hostname: str
    :return: Response message to be sent to the client
+   :rtype: str or None
 
    This hook is called during ``HELO``.
 
    If implemented,
-   this hook MUST also set the :attr:``session.host_name`` attribute
+   this hook MUST also set the :attr:`session.host_name` attribute
    before returning ``'250 {}'.format(server.hostname)`` as the status.
 
-.. py:method:: handle_MAIL(server, session, envelope, address, mail_options) -> str
+.. py:method:: handle_MAIL(server, session, envelope, address, mail_options)
    :async:
 
    :param address: The parsed email address given by the client in the ``MAIL FROM`` command
    :type address: str
    :param mail_options: Additional ESMTP MAIL options provided by the client
-   :type mail_options: List[str]
+   :type mail_options: list[str]
    :return: Response message to be sent to the client
+   :rtype: str or None
 
    Called during ``MAIL FROM``.
 
@@ -175,30 +225,33 @@ The following hooks are currently supported (in alphabetical order):
    this hook MUST also set the :attr:`envelope.mail_from` attribute
    and it MAY extend :attr:`envelope.mail_options` (which is always a Python list).
 
-.. py:method:: handle_NOOP(server, session, envelope, arg) -> str
+.. py:method:: handle_NOOP(server, session, envelope, arg)
    :async:
 
    :param arg: All characters following the ``NOOP`` command
    :type arg: str
    :return: Response message to be sent to the client
+   :rtype: str or None
 
    Called during ``NOOP``.
 
-.. py:method:: handle_QUIT(server, session, envelope) -> str
+.. py:method:: handle_QUIT(server, session, envelope)
    :async:
 
    :return: Response message to be sent to the client
+   :rtype: str or None
 
    Called during ``QUIT``.
 
-.. py:method:: handle_RCPT(server, session, envelope, address, rcpt_options) -> str
+.. py:method:: handle_RCPT(server, session, envelope, address, rcpt_options)
    :async:
 
    :param address: The parsed email address given by the client in the ``MAIL FROM`` command
    :type address: str
    :param rcpt_options: Additional ESMTP RCPT options provided by the client
-   :type rcpt_options: List[str]
+   :type rcpt_options: list[str]
    :return: Response message to be sent to the client
+   :rtype: str or None
 
    Called during ``RCPT TO``.
 
@@ -206,44 +259,69 @@ The following hooks are currently supported (in alphabetical order):
    this hook SHOULD append the address to ``envelope.rcpt_tos``
    and it MAY extend ``envelope.rcpt_options`` (both of which are always Python lists).
 
-.. py:method:: handle_RSET(server, session, envelope) -> str
+.. py:method:: handle_RSET(server, session, envelope)
    :async:
 
    :return: Response message to be sent to the client
+   :rtype: str or None
 
    Called during ``RSET``.
 
-.. py:method:: handle_VRFY(server, session, envelope, address) -> str
+.. py:method:: handle_VRFY(server, session, envelope, address)
    :async:
 
    :param address: The parsed email address given by the client in the ``VRFY`` command
    :type address: str
    :return: Response message to be sent to the client
+   :rtype: str or None
 
    Called during ``VRFY``.
 
-In addition to the SMTP command hooks, the following hooks can also be
-implemented by handlers.  These have different APIs, and are called
-**synchronously** (i.e. they are **not** coroutines).
 
-.. py:method:: handle_STARTTLS(server, session, envelope)
+Special Hooks
+-------------
 
-    If implemented, and if SSL is supported, this method gets called
-    during the TLS handshake phase of ``connection_made()``.  It should return
-    True if the handshake succeeded, and False otherwise.
+In addition to the SMTP command hooks,
+the following hooks can also be implemented by handlers.
 
-.. py:method:: handle_exception(error)
+.. py:method:: handle_STARTTLS(server, session, envelope) -> bool
 
-    If implemented, this method is called when any error occurs during the
-    handling of a connection (e.g. if an ``smtp_<command>()`` method raises an
-    exception).  The exception object is passed in.  This method *must* return
-    a status string, such as ``'542 Internal server error'``.  If the method
-    returns ``None`` or raises an exception, an exception will be logged, and a
-    ``451`` code will be returned to the client.
+   :return: Success of STARTTLS handshake
+   :rtype: bool
 
-    .. important::
+   If implemented, and if SSL is supported, this method gets called
+   during the TLS handshake phase of ``connection_made()``.
 
-        If client connection is lost, this handler will NOT be called.
+   .. warning::
+
+      Unlike other hooks, :meth:`handle_STARTTLS` :boldital:`is NOT async!`
+
+.. py:method:: handle_exception(error) -> str
+   :async:
+
+   :param error: Exception object
+   :type error: Exception
+   :return: Status string
+   :rtype: Optional[str]
+
+   If implemented, this method is called when any error occurs during the
+   handling of a connection (e.g. if an ``smtp_<command>()`` method raises an
+   exception).  The exception object is passed in.
+
+   This method *must* return a status string,
+   such as ``'542 Internal server error'``.
+
+   If the method returns ``None`` or raises an exception,
+   an exception will be logged,
+   and a ``451`` code will be returned to the client.
+
+   .. warning::
+
+      This hook has a **different API!**
+
+   .. important::
+
+      If client connection is lost, this handler will :boldital:`NOT` be called.
 
 
 Built-in handlers
