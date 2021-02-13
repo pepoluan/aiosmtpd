@@ -549,8 +549,9 @@ class SMTP(asyncio.StreamReaderProtocol):
         await self._writer.drain()
 
     async def handle_exception(self, error):
-        if hasattr(self.event_handler, 'handle_exception'):
-            status = await self.event_handler.handle_exception(error)
+        hook = self._handle_hooks.get("exception")
+        if hook:
+            status = await hook(error)
             return status
         else:
             log.exception('%r SMTP session exception', self.session.peer)
