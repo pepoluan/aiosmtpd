@@ -67,7 +67,7 @@ class DataHandler:
     original_content: bytes = None
 
     async def handle_DATA(
-        self, server: Server, session: ServerSession, envelope: Envelope
+            self, server: Server, session: ServerSession, envelope: Envelope
     ) -> str:
         self.content = envelope.content
         self.original_content = envelope.original_content
