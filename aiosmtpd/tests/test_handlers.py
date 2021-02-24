@@ -3,7 +3,7 @@
 
 import logging
 import sys
-from email.message import Message, Message as Em_Message
+from email.message import Message as Em_Message
 from io import StringIO
 from mailbox import Maildir
 from operator import itemgetter
