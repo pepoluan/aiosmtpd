@@ -20,6 +20,7 @@ omit = [
     "aiosmtpd/qa/*",
     "aiosmtpd/testing/*",
     "aiosmtpd/tests/*",
+    "aiosmtpd/_protocol.py",
     ".tox/*",
     "*/helpers/pycharm/*",
     "*/hostedtoolcache/*",  # GitHub Actions site-packages location
