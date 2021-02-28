@@ -39,7 +39,7 @@ from public import public
 from aiosmtpd import __version__
 from aiosmtpd.proxy_protocol import ProxyData, get_proxy
 
-from _protocol import StreamReaderProtocol
+from aiosmtpd._protocol import StreamReaderProtocol
 
 if sys.version_info >= (3, 8):
     from typing import Protocol  # pragma: py-lt-38

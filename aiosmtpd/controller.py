@@ -30,7 +30,7 @@ from warnings import warn
 from public import public
 
 from aiosmtpd.smtp import SMTP
-from _protocol import StreamReaderProtocol
+from aiosmtpd._protocol import StreamReaderProtocol
 
 AsyncServer = asyncio.base_events.Server
 
