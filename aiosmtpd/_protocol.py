@@ -16,7 +16,7 @@ class FlowControlMixin(protocols.Protocol):
     """Reusable flow control logic for StreamWriter.drain().
 
     This implements the protocol methods pause_writing(),
-    resume_reading() and connection_lost().  If the subclass overrides
+    resume_writing() and connection_lost().  If the subclass overrides
     these it must call the super methods.
 
     StreamWriter.drain() must wait for _drain_helper() coroutine.
@@ -76,6 +76,8 @@ class FlowControlMixin(protocols.Protocol):
         self._drain_waiter = waiter
         await waiter
 
+    def _get_close_waiter(self, stream):
+        raise NotImplementedError
 
 
 @public
@@ -122,3 +124,13 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
             # has no effect when using ssl"
             return False
         return True
+
+    def _get_close_waiter(self, stream):
+        return self._closed
+
+    def __del__(self):
+        # Prevent reports about unhandled exceptions.
+        # Better than self._closed._log_traceback = False hack
+        closed = getattr(self, "_closed", None)
+        if closed and closed.done() and not closed.cancelled():
+            closed.exception()
