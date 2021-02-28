@@ -22,7 +22,7 @@ class FlowControlMixin(protocols.Protocol):
     StreamWriter.drain() must wait for _drain_helper() coroutine.
     """
 
-    def __init__(self, loop=None):
+    def __init__(self, loop: AbstractEventLoop = None):
         if loop is None:
             self._loop = events.get_event_loop()
         else:
@@ -49,7 +49,7 @@ class FlowControlMixin(protocols.Protocol):
             if not waiter.done():
                 waiter.set_result(None)
 
-    def connection_lost(self, exc):
+    def connection_lost(self, exc: Exception):
         self._connection_lost = True
         # Wake up the writer if currently paused.
         if not self._paused:
@@ -90,20 +90,21 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
     call inappropriate methods of the protocol.)
     """
 
-    def __init__(self, stream_reader, loop=None):
+    def __init__(self, stream_reader: StreamReader, loop: AbstractEventLoop = None):
         super().__init__(loop=loop)
-        self._stream_reader = stream_reader
-        self._stream_writer = None
-        self._over_ssl = False
+        self._stream_reader: StreamReader = stream_reader
+        self._stream_writer: Optional[StreamWriter] = None
+        self._over_ssl: bool = False
+        self._closed = self._loop.create_future()
 
-    def connection_made(self, transport):
+    def connection_made(self, transport: BaseTransport):
         self._stream_reader.set_transport(transport)
         self._over_ssl = transport.get_extra_info("sslcontext") is not None
         self._stream_writer = StreamWriter(
             transport, self, self._stream_reader, self._loop
         )
 
-    def connection_lost(self, exc):
+    def connection_lost(self, exc: Exception):
         if self._stream_reader is not None:
             if exc is None:
                 self._stream_reader.feed_eof()
@@ -113,7 +114,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
         self._stream_reader = None
         self._stream_writer = None
 
-    def data_received(self, data):
+    def data_received(self, data: bytes):
         self._stream_reader.feed_data(data)
 
     def eof_received(self):
