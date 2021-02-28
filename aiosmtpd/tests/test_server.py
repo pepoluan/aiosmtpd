@@ -539,7 +539,7 @@ class TestFactory:
 
     def test_unknown_args_direct(self, silence_event_loop_closed: bool):
         unknown = "this_is_an_unknown_kwarg"
-        cont = Controller(Sink(), ready_timeout=0.3, **{unknown: True})
+        cont = Controller(Sink(), **{unknown: True})
         expectedre = r"__init__.. got an unexpected keyword argument '" + unknown + r"'"
         try:
             with pytest.raises(TypeError, match=expectedre):
@@ -554,7 +554,7 @@ class TestFactory:
     )
     def test_unknown_args_inkwargs(self, silence_event_loop_closed: bool):
         unknown = "this_is_an_unknown_kwarg"
-        cont = Controller(Sink(), ready_timeout=0.3, server_kwargs={unknown: True})
+        cont = Controller(Sink(), server_kwargs={unknown: True})
         expectedre = r"__init__.. got an unexpected keyword argument '" + unknown + r"'"
         try:
             with pytest.raises(TypeError, match=expectedre):
@@ -567,7 +567,7 @@ class TestFactory:
         # Hypothetical situation where factory() did not raise an Exception
         # but returned None instead
         mocker.patch("aiosmtpd.controller.SMTP", return_value=None)
-        cont = Controller(Sink(), ready_timeout=0.3)
+        cont = Controller(Sink())
         expectedre = r"factory\(\) returned None"
         try:
             with pytest.raises(RuntimeError, match=expectedre):
