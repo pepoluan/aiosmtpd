@@ -1,3 +1,9 @@
+# Copyright 2014-2021 The aiosmtpd Developers
+# SPDX-License-Identifier: Apache-2.0
+
+# Derived from Lib/asyncio/streams.py
+# Copyright © 2001-2021 Python Software Foundation
+
 """Stream-related things."""
 
 
