@@ -1,57 +1,17 @@
 """Stream-related things."""
 
-__all__ = [
-    "StreamReader",
-    "StreamWriter",
-    "StreamReaderProtocol",
-    "IncompleteReadError",
-    "LimitOverrunError",
-]
 
 import logging
-
-from asyncio import events, protocols
+from asyncio import AbstractEventLoop, BaseTransport, events, protocols
 from asyncio.streams import StreamReader, StreamWriter
+from typing import Optional
 
+from public import public
 
-_DEFAULT_LIMIT = 2 ** 16
 logger = logging.getLogger()
 
 
-class IncompleteReadError(EOFError):
-    """
-    Incomplete read error. Attributes:
-
-    - partial: read bytes string before the end of stream was reached
-    - expected: total number of expected bytes (or None if unknown)
-    """
-
-    def __init__(self, partial, expected):
-        super().__init__(
-            "%d bytes read on a total of %r expected bytes" % (len(partial), expected)
-        )
-        self.partial = partial
-        self.expected = expected
-
-    def __reduce__(self):
-        return type(self), (self.partial, self.expected)
-
-
-class LimitOverrunError(Exception):
-    """Reached the buffer limit while looking for a separator.
-
-    Attributes:
-    - consumed: total number of to be consumed bytes.
-    """
-
-    def __init__(self, message, consumed):
-        super().__init__(message)
-        self.consumed = consumed
-
-    def __reduce__(self):
-        return type(self), (self.args[0], self.consumed)
-
-
+@public
 class FlowControlMixin(protocols.Protocol):
     """Reusable flow control logic for StreamWriter.drain().
 
@@ -117,6 +77,8 @@ class FlowControlMixin(protocols.Protocol):
         await waiter
 
 
+
+@public
 class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
     """Helper class to adapt between Protocol and StreamReader.
 
