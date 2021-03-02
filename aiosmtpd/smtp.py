@@ -547,23 +547,6 @@ class SMTP(asyncio.StreamReaderProtocol):
             for m in (self._auth_excludes or []):
                 self._auth_mechs.pop(m, None)
         return self._auth_mechs
-        self._call_limit_default: int
-        if command_call_limit is None:
-            self._enforce_call_limit = False
-        else:
-            self._enforce_call_limit = True
-            if isinstance(command_call_limit, int):
-                self._call_limit_base = {}
-                self._call_limit_default = command_call_limit
-            elif isinstance(command_call_limit, dict):  # noqa: SIM106
-                if not all(map(is_int, command_call_limit.values())):
-                    raise TypeError("All command_call_limit values must be int")
-                self._call_limit_base = command_call_limit
-                self._call_limit_default = command_call_limit.get(
-                    "*", CALL_LIMIT_DEFAULT
-                )
-            else:
-                raise TypeError("command_call_limit must be int or Dict[str, int]")
 
     def _create_session(self) -> Session:
         return Session(self.loop)
