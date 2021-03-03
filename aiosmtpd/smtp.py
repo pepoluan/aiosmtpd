@@ -811,9 +811,9 @@ class SMTP(asyncio.StreamReaderProtocol):
     async def _handle_client(self):
         log.info('%r handling connection', self.session.peer)
 
-        if self._proxy_timeout is not None:
+        if self._proxy_timeout is not None:  # noqa: SIM102
             if not await self._grab_proxy():
-                return 
+                return
 
         await self.push('220 {} {}'.format(self.hostname, self.__ident__))
         if self._call_limit:
