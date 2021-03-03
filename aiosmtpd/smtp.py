@@ -704,6 +704,110 @@ class SMTP(asyncio.StreamReaderProtocol):
         self._reset_timeout()
         return True
 
+    async def _grab_line_and_dispatch(self, call_limit: Dict[str, int]):
+        try:
+            line: bytes = await self._reader.readuntil()
+        except asyncio.LimitOverrunError as error:
+            # Line too long. Read until end of line before sending 500.
+            await self._reader.read(error.consumed)
+            while True:
+                try:
+                    await self._reader.readuntil()
+                    break
+                except asyncio.LimitOverrunError as e:
+                    # Line is even longer...
+                    await self._reader.read(e.consumed)
+                    continue
+            # Now that we have read a full line from the client,
+            # send error response and read the next command line.
+            await self.push("500 Command line too long")
+            return
+        sanitized_log(log.debug, "_handle_client readline: %r", line)
+        # XXX this rstrip may not completely preserve old behavior.
+        line = line.rstrip(b"\r\n")
+        sanitized_log(log.info, "%r >> %r", self.session.peer, line)
+        if not line:
+            await self.push("500 Error: bad syntax")
+            return
+        command, _, arg = line.partition(b" ")
+        # Decode to string only the command name part, which must be
+        # ASCII as per RFC.  If there is an argument, it is decoded to
+        # UTF-8/surrogateescape so that non-UTF-8 data can be
+        # re-encoded back to the original bytes when the SMTP command
+        # is handled.
+        try:
+            command = command.upper().decode(encoding="ascii")
+        except UnicodeDecodeError:
+            await self.push("500 Error: bad syntax")
+            return
+        if not arg:
+            arg = None
+        else:
+            arg = arg.strip()
+            # Remote SMTP servers can send us UTF-8 content despite
+            # whether they've declared to do so or not.  Some old
+            # servers can send 8-bit data.  Use surrogateescape so
+            # that the fidelity of the decoding is preserved, and the
+            # original bytes can be retrieved.
+            if self.enable_SMTPUTF8:
+                arg = arg.decode("utf-8", errors="surrogateescape")
+            else:
+                try:
+                    arg = arg.decode("ascii", errors="strict")
+                except UnicodeDecodeError:
+                    # This happens if enable_SMTPUTF8 is false, meaning
+                    # that the server explicitly does not want to
+                    # accept non-ASCII, but the client ignores that and
+                    # sends non-ASCII anyway.
+                    await self.push("500 Error: strict ASCII mode")
+                    # Should we await self.handle_exception()?
+                    return
+        max_sz = (
+            self.command_size_limits[command]
+            if self.session.extended_smtp
+            else self.command_size_limit
+        )
+        if len(line) > max_sz:
+            await self.push("500 Command line too long")
+            return
+        if not self._tls_handshake_okay and command != "QUIT":
+            await self.push("554 Command refused due to lack of security")
+            return
+        if (
+            self.require_starttls
+            and not self._tls_protocol
+            and command not in ALLOWED_BEFORE_STARTTLS
+        ):
+            # RFC3207 part 4
+            await self.push("530 Must issue a STARTTLS command first")
+            return
+
+        if self._call_limit:
+            budget = call_limit[command]
+            if budget < 1:
+                log.warning("%r over limit for %s", self.session.peer, command)
+                await self.push(f"421 4.7.0 {command} sent too many times")
+                self.transport.close()
+                return
+            call_limit[command] = budget - 1
+
+        method = self.methods_smtp.get(command)
+        if method is None:
+            log.warning("%r unrecognised: %s", self.session.peer, command)
+            bogus_budget = call_limit["\xB0gus"] - 1
+            if bogus_budget < 1:
+                log.warning("%r too many bogus commands", self.session.peer)
+                await self.push("502 5.5.1 Too many unrecognized commands, goodbye.")
+                self.transport.close()
+                return
+            call_limit["\xB0gus"] = bogus_budget
+            await self.push(f'500 Error: command "{command}" not recognized')
+            return
+
+        # Received a valid command, reset the timer.
+        self._reset_timeout()
+        await method(arg)
+
     async def _handle_client(self):
         log.info('%r handling connection', self.session.peer)
 
@@ -720,119 +824,11 @@ class SMTP(asyncio.StreamReaderProtocol):
         else:
             # Not used, but this silences code inspection tools
             call_limit = {}
-        bogus_budget = BOGUS_LIMIT
+        call_limit["\xB0gus"] = BOGUS_LIMIT
 
         while self.transport is not None:   # pragma: nobranch
             try:
-                try:
-                    line: bytes = await self._reader.readuntil()
-                except asyncio.LimitOverrunError as error:
-                    # Line too long. Read until end of line before sending 500.
-                    await self._reader.read(error.consumed)
-                    while True:
-                        try:
-                            await self._reader.readuntil()
-                            break
-                        except asyncio.LimitOverrunError as e:
-                            # Line is even longer...
-                            await self._reader.read(e.consumed)
-                            continue
-                    # Now that we have read a full line from the client,
-                    # send error response and read the next command line.
-                    await self.push('500 Command line too long')
-                    continue
-                sanitized_log(log.debug, '_handle_client readline: %r', line)
-                # XXX this rstrip may not completely preserve old behavior.
-                line = line.rstrip(b'\r\n')
-                sanitized_log(log.info, '%r >> %r', self.session.peer, line)
-                if not line:
-                    await self.push('500 Error: bad syntax')
-                    continue
-                command, _, arg = line.partition(b" ")
-                # Decode to string only the command name part, which must be
-                # ASCII as per RFC.  If there is an argument, it is decoded to
-                # UTF-8/surrogateescape so that non-UTF-8 data can be
-                # re-encoded back to the original bytes when the SMTP command
-                # is handled.
-                try:
-                    command = command.upper().decode(encoding='ascii')
-                except UnicodeDecodeError:
-                    await self.push('500 Error: bad syntax')
-                    continue
-                if not arg:
-                    arg = None
-                else:
-                    arg = arg.strip()
-                    # Remote SMTP servers can send us UTF-8 content despite
-                    # whether they've declared to do so or not.  Some old
-                    # servers can send 8-bit data.  Use surrogateescape so
-                    # that the fidelity of the decoding is preserved, and the
-                    # original bytes can be retrieved.
-                    if self.enable_SMTPUTF8:
-                        arg = str(
-                            arg, encoding='utf-8', errors='surrogateescape')
-                    else:
-                        try:
-                            arg = str(arg, encoding='ascii', errors='strict')
-                        except UnicodeDecodeError:
-                            # This happens if enable_SMTPUTF8 is false, meaning
-                            # that the server explicitly does not want to
-                            # accept non-ASCII, but the client ignores that and
-                            # sends non-ASCII anyway.
-                            await self.push('500 Error: strict ASCII mode')
-                            # Should we await self.handle_exception()?
-                            continue
-                max_sz = (
-                    self.command_size_limits[command]
-                    if self.session.extended_smtp
-                    else self.command_size_limit
-                )
-                if len(line) > max_sz:
-                    await self.push('500 Command line too long')
-                    continue
-                if not self._tls_handshake_okay and command != 'QUIT':
-                    await self.push(
-                        '554 Command refused due to lack of security')
-                    continue
-                if (self.require_starttls
-                        and not self._tls_protocol
-                        and command not in ALLOWED_BEFORE_STARTTLS):
-                    # RFC3207 part 4
-                    await self.push('530 Must issue a STARTTLS command first')
-                    continue
-
-                if self._call_limit:
-                    budget = call_limit[command]
-                    if budget < 1:
-                        log.warning(
-                            "%r over limit for %s", self.session.peer, command
-                        )
-                        await self.push(
-                            f"421 4.7.0 {command} sent too many times"
-                        )
-                        self.transport.close()
-                        continue
-                    call_limit[command] = budget - 1
-
-                method = self.methods_smtp.get(command)
-                if method is None:
-                    log.warning("%r unrecognised: %s", self.session.peer, command)
-                    bogus_budget -= 1
-                    if bogus_budget < 1:
-                        log.warning("%r too many bogus commands", self.session.peer)
-                        await self.push(
-                            "502 5.5.1 Too many unrecognized commands, goodbye."
-                        )
-                        self.transport.close()
-                        continue
-                    await self.push(
-                        f'500 Error: command "{command}" not recognized'
-                    )
-                    continue
-
-                # Received a valid command, reset the timer.
-                self._reset_timeout()
-                await method(arg)
+                await self._grab_line_and_dispatch(call_limit)
             except asyncio.CancelledError:
                 # The connection got reset during the DATA command.
                 # XXX If handler method raises ConnectionResetError, we should
@@ -864,6 +860,8 @@ class SMTP(asyncio.StreamReaderProtocol):
                         self.connection_lost(error)
                     else:
                         await self.push(status)
+
+        log.debug("%r leaving handle_client()", self.session.peer)
 
     async def check_helo_needed(self, helo: str = "HELO") -> bool:
         """
