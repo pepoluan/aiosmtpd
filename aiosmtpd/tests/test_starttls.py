@@ -453,3 +453,9 @@ class TestTLSContext:
         context.verify_mode = ssl.CERT_OPTIONAL  # noqa: DUO122
         smtpd = Server(Sink())
         smtpd.tls_context = None
+
+    def test_tlscontext_typeerror(self):
+        expectre = "tls_context value must be None or SSLContext"
+        with pytest.raises(TypeError, match=expectre):
+            # noinspection PyTypeChecker
+            Server(Sink(), tls_context="a")

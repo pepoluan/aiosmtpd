@@ -496,6 +496,8 @@ class SMTP(asyncio.StreamReaderProtocol):
 
     @tls_context.setter
     def tls_context(self, value: Optional[ssl.SSLContext]):
+        if value is not None and not isinstance(value, ssl.SSLContext):
+            raise TypeError("tls_context value must be None or SSLContext")
         if self._tls_context is not MISSING:
             if value is None:
                 if self._tls_context is None:
