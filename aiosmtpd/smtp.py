@@ -685,25 +685,31 @@ class SMTP(asyncio.StreamReaderProtocol):
                 error.__class__.__name__, str(error))
             return status
 
+    async def _grab_proxy(self) -> bool:
+        self._reset_timeout(self._proxy_timeout)
+        sess = self.session
+        log.debug("%r waiting PROXY handshake", sess.peer)
+        sess.proxy_data = await get_proxy(self._reader)
+        if sess.proxy_data:
+            log.info("%r valid PROXY handshake", sess.peer)
+            status = await self._call_handler_hook("PROXY", sess.proxy_data)
+            log.debug("%r handle_PROXY returned %r", sess.peer, status)
+        else:
+            log.warning("%r invalid PROXY handshake", sess.peer)
+            status = False
+        if status is MISSING or not status:
+            log.info("%r rejected by handle_PROXY", sess.peer)
+            self.transport.close()
+            return False
+        self._reset_timeout()
+        return True
+
     async def _handle_client(self):
         log.info('%r handling connection', self.session.peer)
 
         if self._proxy_timeout is not None:
-            self._reset_timeout(self._proxy_timeout)
-            log.debug("%r waiting PROXY handshake", self.session.peer)
-            self.session.proxy_data = await get_proxy(self._reader)
-            if self.session.proxy_data:
-                log.info("%r valid PROXY handshake", self.session.peer)
-                status = await self._call_handler_hook("PROXY", self.session.proxy_data)
-                log.debug("%r handle_PROXY returned %r", self.session.peer, status)
-            else:
-                log.warning("%r invalid PROXY handshake", self.session.peer)
-                status = False
-            if status is MISSING or not status:
-                log.info("%r rejected by handle_PROXY", self.session.peer)
-                self.transport.close()
-                return
-            self._reset_timeout()
+            if not await self._grab_proxy():
+                return 
 
         await self.push('220 {} {}'.format(self.hostname, self.__ident__))
         if self._call_limit:
