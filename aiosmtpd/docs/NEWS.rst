@@ -41,7 +41,6 @@ Fixed/Improved
 * Maximum length of email address local part is customizable, defaults to no limit. (Closes #257)
 
 
-
 1.4.0 (2021-02-26)
 ==================
 
