@@ -225,7 +225,7 @@ def autostop_loop(
 
 @pytest.fixture
 def plain_controller(
-        get_handler: Callable, get_controller: Callable
+    get_handler: Callable, get_controller: Callable
 ) -> Generator[Controller, None, None]:
     """
     Returns a Controller that, by default, gets invoked with no optional args.
