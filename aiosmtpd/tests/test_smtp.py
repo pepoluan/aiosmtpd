@@ -358,8 +358,7 @@ def authenticator_peeker_controller(
 
 @pytest.fixture
 def decoding_authnotls_controller(
-    get_handler: Callable,
-    get_controller: Callable[..., Controller]
+    get_handler: Callable, get_controller: Callable[..., Controller]
 ) -> Generator[Controller, None, None]:
     handler = get_handler()
     controller = get_controller(
@@ -994,9 +993,7 @@ class TestSMTPAuth(_CommonMethods):
 @pytest.mark.usefixtures("auth_peeker_controller")
 class TestAuthMechanisms(_CommonMethods):
     @pytest.fixture
-    def do_auth_plain1(
-        self, client
-    ) -> Callable[[str], Tuple[int, bytes]]:
+    def do_auth_plain1(self, client) -> Callable[[str], Tuple[int, bytes]]:
         self._ehlo(client)
 
         def do(param: str) -> Tuple[int, bytes]:
@@ -1006,9 +1003,7 @@ class TestAuthMechanisms(_CommonMethods):
         return do
 
     @pytest.fixture
-    def do_auth_login3(
-        self, client
-    ) -> Callable[[str], Tuple[int, bytes]]:
+    def do_auth_login3(self, client) -> Callable[[str], Tuple[int, bytes]]:
         self._ehlo(client)
         resp = client.docmd("AUTH LOGIN")
         assert resp == S.S334_AUTH_USERNAME
