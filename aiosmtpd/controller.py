@@ -94,7 +94,7 @@ class _FakeServer(asyncio.StreamReaderProtocol):
         )
 
     def _client_connected_cb(
-            self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         pass
 
