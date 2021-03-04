@@ -16,11 +16,12 @@ from typing import AnyStr, Callable, Generator, Type, TypeVar, Union
 import pytest
 
 from aiosmtpd.controller import Controller
-from aiosmtpd.handlers import AsyncMessage, Debugging, Mailbox, Proxy, Sink
+from aiosmtpd.handlers import AsyncMessage, Debugging, Mailbox
 from aiosmtpd.handlers import Message as AbstractMessageHandler
+from aiosmtpd.handlers import Proxy, Sink
 from aiosmtpd.smtp import SMTP as Server
-from aiosmtpd.smtp import Session as ServerSession
 from aiosmtpd.smtp import Envelope
+from aiosmtpd.smtp import Session as ServerSession
 from aiosmtpd.testing.statuscodes import SMTP_STATUS_CODES as S
 from aiosmtpd.testing.statuscodes import StatusCode
 
@@ -67,7 +68,7 @@ class DataHandler:
     original_content: bytes = None
 
     async def handle_DATA(
-            self, server: Server, session: ServerSession, envelope: Envelope
+        self, server: Server, session: ServerSession, envelope: Envelope
     ) -> str:
         self.content = envelope.content
         self.original_content = envelope.original_content
