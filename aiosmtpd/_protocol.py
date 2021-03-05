@@ -96,11 +96,13 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
     call inappropriate methods of the protocol.)
     """
 
+    # Fully internal states
+    _stream_writer: Optional[StreamWriter] = None
+    _over_ssl: bool = False
+
     def __init__(self, stream_reader: StreamReader, loop: AbstractEventLoop = None):
         super().__init__(loop=loop)
         self._stream_reader: StreamReader = stream_reader
-        self._stream_writer: Optional[StreamWriter] = None
-        self._over_ssl: bool = False
         self._closed = self._loop.create_future()
 
     def connection_made(self, transport: BaseTransport):

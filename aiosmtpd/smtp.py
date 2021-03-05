@@ -335,6 +335,8 @@ class SMTP(StreamReaderProtocol):
     _ehlo_hook_ver: Optional[str] = None
     _handler_coroutine: Optional[asyncio.Task] = None
     _timeout_handle: Optional[asyncio.TimerHandle] = None
+    _reader: Optional[asyncio.StreamReader] = None
+    _writer: Optional[asyncio.StreamWriter] = None
 
     _tls_context: Optional[Union[ssl.SSLContext, _Missing]] = MISSING
     _req_starttls: bool = False
