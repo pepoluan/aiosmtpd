@@ -629,6 +629,8 @@ class SMTP(StreamReaderProtocol):
         super().connection_lost(error)
         self._handler_coroutine.cancel()
         self.transport = None
+        # Do NOT release self._writer yet; we still needs to do things with it...
+        self._reader = None
 
     def eof_received(self) -> bool:
         log.info('%r EOF received', self.session.peer)
