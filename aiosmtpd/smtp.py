@@ -811,37 +811,38 @@ class SMTP(asyncio.StreamReaderProtocol):
         await method(arg)
 
     async def _handle_client(self):
-        log.info('%r handling connection', self.session.peer)
+        log.info("%r handling connection", self.session.peer)
 
         if self._proxy_timeout is not None:  # noqa: SIM102
             if not await self._grab_proxy():
                 return
 
-        await self.push('220 {} {}'.format(self.hostname, self.__ident__))
+        await self.push("220 {} {}".format(self.hostname, self.__ident__))
         if self._call_limit:
             call_limit = collections.defaultdict(
-                partial(int, self._call_limit["*"]),
-                self._call_limit
+                partial(int, self._call_limit["*"]), self._call_limit
             )
         else:
             # Not used, but this silences code inspection tools
             call_limit = {}
         call_limit["\xB0gus"] = BOGUS_LIMIT
 
-        while self.transport is not None:   # pragma: nobranch
+        while self.transport is not None:  # pragma: nobranch
             try:
                 await self._grab_line_and_dispatch(call_limit)
             except asyncio.CancelledError:
                 # The connection got reset during the DATA command.
                 # XXX If handler method raises ConnectionResetError, we should
                 # verify that it was actually self._reader that was reset.
-                log.info('%r Connection lost during _handle_client()',
-                         self.session.peer)
+                log.info(
+                    "%r Connection lost during _handle_client()", self.session.peer
+                )
                 self._writer.close()
                 raise
             except ConnectionResetError:
-                log.info('%r Connection lost during _handle_client()',
-                         self.session.peer)
+                log.info(
+                    "%r Connection lost during _handle_client()", self.session.peer
+                )
                 self._writer.close()
                 raise
             except Exception as error:
@@ -850,12 +851,14 @@ class SMTP(asyncio.StreamReaderProtocol):
                     status = await self.handle_exception(error)
                 except Exception as inner_error:
                     try:
-                        log.exception('%r Exception in handle_exception()',
-                                      self.session.peer)
-                        status = '500 Error: ({}) {}'.format(
-                            inner_error.__class__.__name__, str(inner_error))
+                        log.exception(
+                            "%r Exception in handle_exception()", self.session.peer
+                        )
+                        status = "500 Error: ({}) {}".format(
+                            inner_error.__class__.__name__, str(inner_error)
+                        )
                     except Exception:
-                        status = '500 Error: Cannot describe error'
+                        status = "500 Error: Cannot describe error"
                 finally:
                     if isinstance(error, TLSSetupException):
                         self.transport.close()
