@@ -14,6 +14,8 @@ Fixed/Improved
 --------------
 * All Controllers now have more rationale design, as they are now composited from a Base + a Mixin
 * A whole bunch of annotations
+* ``HostPort`` used in testing now looks for unused listening port.
+  This should help running the tests in parallel.
 
 
 1.4.2 (2021-03-08)
