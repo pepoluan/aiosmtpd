@@ -22,9 +22,9 @@ from pytest_mock import MockFixture
 
 from aiosmtpd.handlers import Sink
 from aiosmtpd.proxy_protocol import (
-    V2_CMD,
     AF,
     PROTO,
+    V2_CMD,
     V2_SIGNATURE,
     AsyncReader,
     MalformedTLV,
