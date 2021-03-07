@@ -5,11 +5,20 @@ import asyncio
 import inspect
 import socket
 import ssl
-from contextlib import suppress, contextmanager
+from contextlib import contextmanager, suppress
 from functools import wraps
 from smtplib import SMTP as SMTPClient
-from typing import Any, Callable, Generator, NamedTuple, Optional, Type, TypeVar
-from typing import Any, Generator, NamedTuple, Optional, Sequence, Type, overload
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+    overload,
+)
 
 import pytest
 from pkg_resources import resource_filename
