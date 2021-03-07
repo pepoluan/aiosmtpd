@@ -6,7 +6,6 @@ import errno
 import logging
 import operator
 import random
-import socket
 import struct
 import time
 from base64 import b64decode
