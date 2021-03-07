@@ -122,7 +122,7 @@ class Global:
 
     @classmethod
     @contextmanager
-    def get_sock(cls) -> socket.socket:
+    def get_sock(cls) -> Generator[socket.socket, None, None]:
         with socket.socket(cls._HostPort.fam, socket.SOCK_STREAM) as sock:
             yield sock
 
