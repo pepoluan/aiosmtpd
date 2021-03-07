@@ -1638,7 +1638,7 @@ class TestSMTPWithController(_CommonMethods):
 
     @controller_data(data_size_limit=20)
     def test_too_long_body_delay_error(self, plain_controller):
-        with socket.socket() as sock:
+        with Global.get_sock() as sock:
             sock.connect((plain_controller.hostname, plain_controller.port))
             rslt = send_recv(sock, b"EHLO example.com")
             assert rslt.startswith(b"220")
@@ -1666,7 +1666,7 @@ class TestSMTPWithController(_CommonMethods):
         assert exc.value.args == S.S552_DATA_TOO_MUCH
 
     def test_too_long_line_delay_error(self, plain_controller):
-        with socket.socket() as sock:
+        with Global.get_sock() as sock:
             sock.connect((plain_controller.hostname, plain_controller.port))
             rslt = send_recv(sock, b"EHLO example.com")
             assert rslt.startswith(b"220")

@@ -979,7 +979,7 @@ class TestGetV2(_TestProxyProtocolCommon):
 @handler_data(class_=ProxyPeekerHandler)
 class TestWithController:
     def _okay(self, handshake: bytes):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        with Global.get_sock() as sock:
             sock.connect(Global.SrvAddr)
             sock.sendall(handshake)
             resp = sock.makefile("rb").readline()
@@ -999,7 +999,7 @@ class TestWithController:
     @parametrize("handshake", HANDSHAKES.values(), ids=HANDSHAKES.keys())
     def test_hiccup(self, plain_controller, handshake):
         assert plain_controller.smtpd._proxy_timeout > 0.0
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        with Global.get_sock() as sock:
             sock.connect(Global.SrvAddr)
             sock.sendall(handshake[0:20])
             time.sleep(0.1)
@@ -1016,7 +1016,7 @@ class TestWithController:
     @parametrize("handshake", HANDSHAKES.values(), ids=HANDSHAKES.keys())
     def test_timeout(self, plain_controller, handshake):
         assert plain_controller.smtpd._proxy_timeout > 0.0
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        with Global.get_sock() as sock:
             sock.connect(Global.SrvAddr)
             time.sleep(plain_controller.smtpd._proxy_timeout * TIMEOUT_MULTIPLIER)
             # noinspection PyTypeChecker
@@ -1052,7 +1052,7 @@ class TestWithController:
     @parametrize("handshake", HANDSHAKES.values(), ids=HANDSHAKES.keys())
     def test_incomplete(self, plain_controller, handshake):
         assert plain_controller.smtpd._proxy_timeout > 0.0
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        with Global.get_sock() as sock:
             sock.connect(Global.SrvAddr)
             sock.send(handshake[:-1])
             time.sleep(plain_controller.smtpd._proxy_timeout * TIMEOUT_MULTIPLIER)
@@ -1113,7 +1113,7 @@ class TestHandlerAcceptReject:
             oper = operator.eq
             expect = pytest.raises(SMTPServerDisconnected)
         oper = operator.ne if handler_retval else operator.eq
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        with Global.get_sock() as sock:
             sock.connect(Global.SrvAddr)
             sock.sendall(handshake)
             resp = sock.recv(4096)

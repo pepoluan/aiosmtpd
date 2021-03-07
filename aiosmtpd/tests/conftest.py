@@ -5,16 +5,17 @@ import asyncio
 import inspect
 import socket
 import ssl
-from contextlib import suppress
+from contextlib import suppress, contextmanager
 from functools import wraps
 from smtplib import SMTP as SMTPClient
 from typing import Any, Callable, Generator, NamedTuple, Optional, Type, TypeVar
+from typing import Any, Generator, NamedTuple, Optional, Sequence, Type, overload
 
 import pytest
 from pkg_resources import resource_filename
 from pytest_mock import MockFixture
 
-from aiosmtpd.controller import Controller
+from aiosmtpd.controller import Controller, get_localhost
 from aiosmtpd.handlers import Sink
 
 try:
@@ -46,9 +47,58 @@ handler_data = pytest.mark.handler_data
 # region #### Custom datatypes ########################################################
 
 
-class HostPort(NamedTuple):
-    host: str = "localhost"
-    port: int = 8025
+class HostPortTuple(NamedTuple):
+    host: str
+    port: int
+
+
+class HostPort(Sequence):
+    __slots__ = ("host", "port", "fam")
+
+    def __init__(self, host: str = None, port: int = 0):
+        localhost = get_localhost()
+        self.fam = socket.AF_INET6 if localhost == "::1" else socket.AF_INET
+        if not host:
+            host = localhost
+        self.host: str = host
+        if not port:
+            with socket.socket(self.fam, socket.SOCK_STREAM) as sock:
+                sock.bind((host, 0))
+                port = sock.getsockname()[1]
+        self.port: int = port
+
+    def as_tuple(self) -> HostPortTuple:
+        return HostPortTuple(host=self.host, port=self.port)
+
+    def __repr__(self) -> str:
+        return f"HostPort('{self.host}', {self.port})"
+
+    def __str__(self) -> str:
+        return f"('{self.host}', {self.port})"
+
+    # The below dunders required to 'emulate' tuple
+
+    @overload
+    def __getitem__(self, i: int) -> Any:
+        return self.as_tuple()[i]
+
+    def __getitem__(self, s: slice) -> Sequence[Any]:
+        return self.as_tuple().__getitem__(s)
+
+    def __len__(self) -> int:
+        return len(self.__slots__)
+
+    def __eq__(self, other):
+        if len(other) != len(self.__slots__):
+            return False
+        if other[0] != self.host:
+            return False
+        return other[1] == self.port
+
+    def __lt__(self, other):
+        if other[0] > self.host:
+            return True
+        return other[1] > self.port
 
 
 RT = TypeVar("RT")  # "ReturnType"
@@ -61,12 +111,20 @@ RT = TypeVar("RT")  # "ReturnType"
 
 
 class Global:
-    SrvAddr: HostPort = HostPort()
+    _HostPort = HostPort()
+    SrvAddr: HostPortTuple = _HostPort.as_tuple()
     FQDN: str = socket.getfqdn()
 
     @classmethod
     def set_addr_from(cls, contr: Controller):
-        cls.SrvAddr = HostPort(contr.hostname, contr.port)
+        cls._HostPort = HostPort(contr.hostname, contr.port)
+        cls.SrvAddr = cls._HostPort.as_tuple()
+
+    @classmethod
+    @contextmanager
+    def get_sock(cls) -> socket.socket:
+        with socket.socket(cls._HostPort.fam, socket.SOCK_STREAM) as sock:
+            yield sock
 
 
 # If less than 1.0, might cause intermittent error if test system
@@ -142,7 +200,7 @@ def get_controller(request: pytest.FixtureRequest) -> Callable[..., Controller]:
                 f"Fixture '{request.fixturename}' needs controller_data to specify "
                 f"what class to use"
             )
-        ip_port: HostPort = markerdata.pop("host_port", HostPort())
+        ip_port: HostPortTuple = markerdata.pop("host_port", HostPort().as_tuple())
         # server_kwargs takes precedence, so it's rightmost (PEP448)
         server_kwargs = {**markerdata, **server_kwargs}
         server_kwargs.setdefault("hostname", ip_port.host)
