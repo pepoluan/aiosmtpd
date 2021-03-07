@@ -16,8 +16,9 @@ import pytest
 from pytest_mock import MockFixture
 
 from aiosmtpd import __version__
+from aiosmtpd.controller import get_localhost
 from aiosmtpd.handlers import Debugging
-from aiosmtpd.main import main, parseargs
+from aiosmtpd.main import DEFAULT_HOST, DEFAULT_PORT, main, parseargs
 from aiosmtpd.testing.helpers import catchup_delay
 from aiosmtpd.testing.statuscodes import SMTP_STATUS_CODES as S
 from aiosmtpd.tests.conftest import AUTOSTOP_DELAY, SERVER_CRT, SERVER_KEY
@@ -86,7 +87,7 @@ def watch_for_tls(ready_flag: MP_Event, retq: MP.Queue):
     delay = AUTOSTOP_DELAY * 4
     while (time.monotonic() - start) <= delay:
         try:
-            with SMTPClient("localhost", 8025, timeout=0.1) as client:
+            with SMTPClient(DEFAULT_HOST, DEFAULT_PORT) as client:
                 resp = client.docmd("HELP", "HELO")
                 if resp == S.S530_STARTTLS_FIRST:
                     req_tls = True
@@ -107,7 +108,7 @@ def watch_for_smtps(ready_flag: MP_Event, retq: MP.Queue):
     delay = AUTOSTOP_DELAY * 1.5
     while (time.monotonic() - start) <= delay:
         try:
-            with SMTP_SSL("localhost", 8025, timeout=0.1) as client:
+            with SMTP_SSL(DEFAULT_HOST, DEFAULT_PORT) as client:
                 client.ehlo("exemple.org")
                 has_smtps = True
                 break
@@ -239,7 +240,7 @@ class TestParseArgs:
         assert args.classpath == "aiosmtpd.handlers.Debugging"
         assert args.debug == 0
         assert isinstance(args.handler, Debugging)
-        assert args.host == "localhost"
+        assert args.host == get_localhost()
         assert args.listen is None
         assert args.port == 8025
         assert args.setuid is True
@@ -278,11 +279,11 @@ class TestParseArgs:
     @pytest.mark.parametrize(
         ("args", "exp_host", "exp_port"),
         [
-            ((), "localhost", 8025),
+            ((), DEFAULT_HOST, DEFAULT_PORT),
             (("-l", "foo:25"), "foo", 25),
             (("--listen", "foo:25"), "foo", 25),
-            (("-l", "foo"), "foo", 8025),
-            (("-l", ":25"), "localhost", 25),
+            (("-l", "foo"), "foo", DEFAULT_PORT),
+            (("-l", ":25"), DEFAULT_HOST, 25),
             (("-l", "::0:25"), "::0", 25),
         ],
     )

@@ -17,6 +17,7 @@ from typing import Optional, Sequence, Tuple
 from public import public
 
 from aiosmtpd import __version__
+from aiosmtpd.controller import get_localhost
 from aiosmtpd.smtp import DATA_SIZE_DEFAULT, SMTP
 
 try:
@@ -25,7 +26,7 @@ except ImportError:  # pragma: has-pwd
     pwd = None
 
 
-DEFAULT_HOST = "localhost"
+DEFAULT_HOST = get_localhost()
 DEFAULT_PORT = 8025
 DEFAULT_CLASS = "aiosmtpd.handlers.Debugging"
 
