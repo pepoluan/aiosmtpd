@@ -199,11 +199,7 @@ class BaseController(metaclass=ABCMeta):
         """
         if stop_loop:  # pragma: nobranch
             self.loop.stop()
-        try:
-            _all_tasks = asyncio.all_tasks  # pytype: disable=module-attr
-        except AttributeError:  # pragma: py-gt-36
-            _all_tasks = asyncio.Task.all_tasks  # pytype: disable=attribute-error
-        for task in _all_tasks(self.loop):
+        for task in asyncio.all_tasks(self.loop):
             # This needs to be invoked in a thread-safe way
             task.cancel()
 
