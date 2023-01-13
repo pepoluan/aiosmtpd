@@ -117,13 +117,7 @@ jobs:
         pip install bandit
         bandit -c bandit.yml -r aiosmtpd
 
-    # IMPORTANT: pypy3.8 is currently excluded from coverage testing because coverage seems to be unstable when
-    # running on PyPy 3.8. This is still under investigation (See issue #325)
-    # Edit: This is due to change in behavior in PyPy v7.3.10, and coverage.py needs to adapt.
-    # See: https://github.com/nedbat/coveragepy/issues/1515
-
     - name: "Execute testing with coverage"
-      if: matrix.python-version != 'pypy3.8'
       shell: bash
       # language=bash
       run: |
@@ -133,17 +127,18 @@ jobs:
         fi
         pytest --cov --cov-report=xml --cov-report=term
         #
-    - name: "Execute testing w/o coverage"
-      if: matrix.python-version == 'pypy3.8'
-      shell: bash
-      # language=bash
-      run: |
-        # Fetch master if needed because some test cases need its existence
-        if [[ $GITHUB_REF != refs/heads/master ]]; then
-          git fetch --no-tags --prune --no-recurse-submodules --depth=1 origin master:master
-        fi
-        pytest
-        #
+
+#    - name: "Execute testing w/o coverage"
+#      if: matrix.python-version == 'pypy3.8'
+#      shell: bash
+#      # language=bash
+#      run: |
+#        # Fetch master if needed because some test cases need its existence
+#        if [[ $GITHUB_REF != refs/heads/master ]]; then
+#          git fetch --no-tags --prune --no-recurse-submodules --depth=1 origin master:master
+#        fi
+#        pytest
+#        #
 
     - name: "Report to codecov"
       # Ubuntu 18.04 came out of the box with 3.6, and LOTS of system are still running
